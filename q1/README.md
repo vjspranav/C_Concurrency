@@ -21,13 +21,13 @@ __Expected Inputs__
 > Length of array to be sorted, n and n space separated integers
 
 ## Implementation
-__Normal__
+__Normal__  
 The normal merge sort implementaion recursively dividing the array and merging from single sized array to complete. The usual.  
 
-__Processes__
+__Processes__  
 Here instead of recursively dividing, we create a child process and let it do the division and mergin and let the parent wait untill both childs complete execution.  
 
-__Threads__
+__Threads__  
 Almost like processes but we get multiple threads which each run independent of the other and sort among themselve =s till they finally come together and Join.  
 
 ## Expected Outcome
