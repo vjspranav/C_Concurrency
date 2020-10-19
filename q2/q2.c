@@ -200,8 +200,9 @@ void *vaccinating(void *arg){
                     pthread_mutex_lock(&zone1Mutex);
                     numStudentsleft-=1;
                     numStudentsWaiting-=1;
+                    sleep(2);
                     pthread_mutex_unlock(&zone1Mutex);
-                    sleep(3);
+                    sleep(1);
                 }
             }
             for(i=0;i<8;i++){
@@ -240,8 +241,6 @@ void *incomingStudents(void *arg){
                         printf("\nStudent %d assigned zone %d on slot %d\nRemaining=%d\n", students[num]->num, zones[i]->zone_num, j, numStudentsleft);
                         break;
                     }
-                    if(students[num]->zone_num!=0)
-                        break;
                 }
             }
         }
@@ -268,7 +267,6 @@ void *incomingStudents(void *arg){
             students[num]->cur_status=NOT_VACCINATED; 
             pthread_mutex_unlock(&mutex1);
             if(students[num]->num_try>=3){
-
                 printf(ANSI_RED"Student %d being sent back\n", students[num]->num);
                 setDefaultColor();
                 studentStatus[num]=1;
