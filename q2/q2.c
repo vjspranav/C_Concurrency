@@ -82,12 +82,15 @@ typedef struct student{
 }student;
 
 int numVaccines, numCompanies, numZones, numStudents, numStudentsleft, numStudentsWaiting;
+int studentStatus[200];
 pthread_t company_thread[200], zone_thread[200], student_thread[200];
 company *companies[200];
 vaccine_zones *zones[200];
 student *students[200];
-pthread_mutex_t mutex, studentMutex, zoneMutex, zone1Mutex;
-
+pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER; 
+pthread_mutex_t studentMutex=PTHREAD_MUTEX_INITIALIZER; 
+pthread_mutex_t zoneMutex=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t zone1Mutex=PTHREAD_MUTEX_INITIALIZER;
 /* Main Functions */
 
 int random(int min, int max){
@@ -101,6 +104,21 @@ int min(int a, int b, int c){
         return b;
     else
         return c;
+}
+
+int checkStatus(){
+    int i;
+    for(i=0;i<numStudents;i++)
+        if(studentStatus[i]==0)
+            return 1;
+    return 0;
+}
+
+void printStatus(){
+    int i;
+    for(i=0;i<numStudents;i++)
+        printf("%d ", studentStatus[i]);
+    printf("\n");
 }
 
 void *production(void *arg){
@@ -141,56 +159,62 @@ void *production(void *arg){
 }
 
 void *vaccinating(void *arg){
-    int i;
+    int i, tmp=0;
     int num=*(int *) arg;
     while(numStudentsleft>0){
         zones[num]->is_vaccinating=-1;
         // Waiting for company to provide vaccine
         while(zones[num]->numVaccines==0)
             ;
+        tmp=1;
         while(zones[num]->numVaccines>0){
             zones[num]->num_slots_filled=0;
             zones[num]->is_vaccinating=0;
+            printf("%d, waiting=%d, numvac=%d\n\n", 8, numStudentsWaiting, zones[num]->numVaccines);
             zones[num]->num_slots=min(8, numStudentsWaiting, zones[num]->numVaccines);
+            printf(ANSI_YELLOW"\nVaccination Zone %d is ready to vaccinate with %d slots\n​", zones[num]->zone_num, zones[num]->num_slots);
+            setDefaultColor();
             pthread_mutex_lock(&mutex);
-            printf("Zone %d Recieved %d vaccines from Company %d\n", zones[num]->zone_num, zones[num]->numVaccines, zones[num]->company_num);
-
             // Waiting for slots to fill up
-            printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
-            setDefaultColor();        
             zones[num]->is_vaccinating=-1;
             pthread_mutex_lock(&zoneMutex);
             zones[num]->is_vaccinating=1;
-            printf("%d slots filled, total slots are %d\n", zones[num]->num_slots_filled, zones[num]->num_slots);
+            printf("Current students in line: ");
             for(i=0;i<zones[num]->num_slots;i++){
-                printf("In zone %d, slot %d=%d\n", zones[num]->zone_num, i+1, zones[num]->slots[i]);
+                printf("%d ", zones[num]->slots[i]);
             }
+            printf("\n");
+            while(numStudentsWaiting<=0)
+                ; //Wait  for someone to come
+            printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
+            setDefaultColor();        
+
             for(i=0;i<zones[num]->num_slots;i++){
                 if(zones[num]->slots[i]>0){
-                    printf("\nVaccinating %d student in zone %d\n", zones[num]->slots[i]-1, zones[num]->zone_num);
-                    pthread_mutex_lock(&zone1Mutex);
+                    printf("\nVaccinating %d student in zone %d\n", zones[num]->slots[i], zones[num]->zone_num);
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATING;
                     zones[num]->numVaccines-=1;
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATED;
                     zones[num]->slots[i]=0;
                     zones[num]->num_slots_filled-=1;
+                    pthread_mutex_lock(&zone1Mutex);
                     numStudentsleft-=1;
                     numStudentsWaiting-=1;
+                    sleep(2);
                     pthread_mutex_unlock(&zone1Mutex);
+                    sleep(1);
                 }
             }
             for(i=0;i<8;i++){
-                zones[num]->slots[i]=0;   //again block all the slots and mext iteration it releases only designated slots
-            } 
+                zones[num]->slots[i]=0;
+            }
             pthread_mutex_unlock(&zoneMutex);
             zones[num]->is_vaccinating=0;
-
             pthread_mutex_unlock(&mutex);
-            sleep(2);
-            if(numStudentsleft==0){
+            printStatus();
+            if(!checkStatus()){
                 return NULL;
             }
-
         }
     }
 }
@@ -207,12 +231,13 @@ void *incomingStudents(void *arg){
             for(i=0;i<numZones;i++){
                 pthread_mutex_lock(&studentMutex);
                 for(j=0;j<zones[i]->num_slots;j++){
-                    if(zones[i]->slots[j]==0 && zones[i]->is_vaccinating==0){
+                    if(zones[i]->slots[j]<=0 && zones[i]->is_vaccinating==0){
                         zones[i]->slots[j]=students[num]->num;
                         students[num]->zone_num=zones[i]->zone_num;
                         students[num]->cur_status=NOT_VACCINATED;
                         students[num]->num_try+=1;
                         zones[i]->num_slots_filled+=1;
+                        printf("\nStudent %d assigned zone %d\nRemaining=%d\n", students[num]->num, zones[i]->zone_num, numStudentsleft);
                         break;
                     }
                 }
@@ -223,20 +248,16 @@ void *incomingStudents(void *arg){
         // Waiting for vaccination to be done
         while(students[num]->cur_status!=VACCINATED)
             ;
-        printf("Student %d vaccinated\n", num+1);
+        printf("Student %d/%d vaccinated\n", num+1, students[num]->num);
         //printf(ANSI_YELLOW"Student %d on Vaccination Zone %d has been vaccinated which has success probability %f\n", students[num]->num, students[num]->zone_num , zones[students[num]->zone_num]->probability);
         // Check Antibody  
-        int a=random(1, 100)%2;  
+        int a=1;//random(1, 100)%2;  
         if(a==1){
             printf(ANSI_GREEN"Student %d tested positive for antibodies\n", students[num]->num);
             setDefaultColor();
             //printf("Num Student left = %d\n", numStudentsleft);
-            if(numStudentsleft==0){
-                //sleep(4);
-                printf("\nSimulation Done\n");
-                _exit(0);
-            }
-
+            studentStatus[num]=1;
+            return NULL;
             break;
         }else{
             printf(ANSI_RED"Student %d tested negative %d times\n", students[num]->num, students[num]->num_try);
@@ -246,6 +267,8 @@ void *incomingStudents(void *arg){
             if(students[num]->num_try>=3){
                 printf(ANSI_RED"Student %d being sent back\n", students[num]->num);
                 setDefaultColor();
+                studentStatus[num]=1;
+                return NULL;
             }else{
                 numStudentsleft+=1;
                 numStudentsWaiting+=1;
@@ -297,7 +320,7 @@ int main(){
         students[i]->cur_status=0;
         students[i]->antibody=0;
         students[i]->num_try=0;
-        students[i]->time=0;
+        students[i]->time=random(1, 10);//0;
         students[i]->num=i+1;
     }
 
@@ -320,13 +343,11 @@ int main(){
         pthread_create(&zone_thread[i], NULL, incomingStudents, arg);
         sleep(1);
     }
- //   for(i=0;i<numZones;i++){
- //       pthread_join(student_thread[i], NULL);
- //   }
     for(i=0;i<numZones;i++){
         pthread_join(zone_thread[i], NULL);
     }
-    while(numStudentsleft>0)
+    while(checkStatus())
         ;
+    printf("Simulation Complete\n");
 }
 
