@@ -73,6 +73,7 @@ typedef struct vaccine_zones {
  * num - id
  */ 
 typedef struct student{
+    float probability;
     int cur_status;
     int num_try;
     int zone_num;
@@ -186,7 +187,10 @@ void *vaccinating(void *arg){
             printf("\n");
             while(numStudentsWaiting<0)
                 ; //Wait  for someone to come
-            printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
+            if(tmp==1){
+                printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
+                tmp=0;
+            }
             setDefaultColor();        
 
             for(i=0;i<8;i++){
@@ -195,6 +199,7 @@ void *vaccinating(void *arg){
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATING;
                     zones[num]->numVaccines-=1;
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATED;
+                    students[zones[num]->slots[i]-1]->probability=zones[num]->probability;
                     zones[num]->slots[i]=0;
                     zones[num]->num_slots_filled-=1;
                     pthread_mutex_lock(&zone1Mutex);
@@ -251,7 +256,7 @@ void *incomingStudents(void *arg){
         printf("Student %d/%d vaccinated\n", num+1, students[num]->num);
         //printf(ANSI_YELLOW"Student %d on Vaccination Zone %d has been vaccinated which has success probability %f\n", students[num]->num, students[num]->zone_num , zones[students[num]->zone_num]->probability);
         // Check Antibody  
-        int a=random(1, 100)%2;  
+        int a= random(1, 100) < (students[num]->probability * 100);  
         if(a==1){
             printf(ANSI_GREEN"Student %d tested positive for antibodies\n", students[num]->num);
             setDefaultColor();
