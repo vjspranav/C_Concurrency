@@ -184,7 +184,7 @@ void *vaccinating(void *arg){
                 printf("%d ", zones[num]->slots[i]);
             }
             printf("\n");
-            while(numStudentsWaiting<=0)
+            while(numStudentsWaiting<0)
                 ; //Wait  for someone to come
             printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
             setDefaultColor();        
@@ -262,8 +262,10 @@ void *incomingStudents(void *arg){
         }else{
             printf(ANSI_RED"Student %d tested negative %d times\n", students[num]->num, students[num]->num_try);
             setDefaultColor();
+            pthread_mutex_lock(&mutex1);
             students[num]->zone_num=0;
-            students[num]->cur_status=NOT_VACCINATED;
+            students[num]->cur_status=NOT_VACCINATED; 
+            pthread_mutex_unlock(&mutex1);
             if(students[num]->num_try>=3){
                 printf(ANSI_RED"Student %d being sent back\n", students[num]->num);
                 setDefaultColor();
@@ -273,7 +275,6 @@ void *incomingStudents(void *arg){
                 pthread_mutex_lock(&mutex1);
                 numStudentsleft+=1;
                 numStudentsWaiting+=1;
-                students[num]->cur_status=NOT_VACCINATED;
                 pthread_mutex_unlock(&mutex1);
             }
         }
@@ -311,6 +312,11 @@ int main(){
         companies[i]->company_num=i+1;
         printf("Please enter probability of vaccine of Company %d: ", i+1);
         scanf("%f", &companies[i]->probability);
+        if(companies[i]->probability > 1 || companies[i]->probability < 0){
+            printf(ANSI_RED"Invalid probability range given exiting...\n");
+            setDefaultColor();
+            _exit(1);
+        }
     }
 
     for(i=0;i<numZones;i++){
@@ -323,7 +329,7 @@ int main(){
         students[i]->cur_status=0;
         students[i]->antibody=0;
         students[i]->num_try=0;
-        students[i]->time=random(1, 10);//0;
+        students[i]->time=random(0, 10);//0;
         students[i]->num=i+1;
     }
 
