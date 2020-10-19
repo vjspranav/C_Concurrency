@@ -189,7 +189,7 @@ void *vaccinating(void *arg){
             printf(ANSI_CYAN"Vaccination Zone %d entering Vaccination Phase\n",zones[num]->zone_num);
             setDefaultColor();        
 
-            for(i=0;i<zones[num]->num_slots;i++){
+            for(i=0;i<8;i++){
                 if(zones[num]->slots[i]>0){
                     printf("\nVaccinating %d student in zone %d\n", zones[num]->slots[i], zones[num]->zone_num);
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATING;
@@ -224,7 +224,7 @@ void *incomingStudents(void *arg){
     int num=*(int *) arg;
     sleep(students[num]->time);
     numStudentsWaiting+=1;
-    while(students[num]->num_try<=3){
+    while(students[num]->num_try<3){
         printf(ANSI_MAGENTA"Student %d has arrived for his %d round of Vaccination\n", students[num]->num,students[num]->num_try+1);
         setDefaultColor();
         pthread_mutex_lock(&studentMutex);
@@ -272,6 +272,7 @@ void *incomingStudents(void *arg){
                 pthread_mutex_lock(&mutex1);
                 numStudentsleft+=1;
                 numStudentsWaiting+=1;
+                students[num]->cur_status=NOT_VACCINATED;
                 pthread_mutex_unlock(&mutex1);
             }
         }
