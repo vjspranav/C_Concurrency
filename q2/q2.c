@@ -230,7 +230,8 @@ void *incomingStudents(void *arg){
         pthread_mutex_lock(&studentMutex);
         while(students[num]->cur_status!=VACCINATED && students[num]->zone_num==0){
             for(i=0;i<numZones;i++){
-                for(j=0;j<zones[i]->num_slots;j++){
+                int n=zones[i]->num_slots;
+                for(j=0;j<n;j++){
                     if(zones[i]->slots[j]<=0 && zones[i]->is_vaccinating==0){
                         zones[i]->slots[j]=students[num]->num;
                         students[num]->zone_num=zones[i]->zone_num;
