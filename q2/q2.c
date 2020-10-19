@@ -228,7 +228,9 @@ void *incomingStudents(void *arg){
     int i, j;
     int num=*(int *) arg;
     sleep(students[num]->time);
+    pthread_mutex_lock(&studentMutex);
     numStudentsWaiting+=1;
+    pthread_mutex_unlock(&studentMutex);
     while(students[num]->num_try<3){
         printf(ANSI_MAGENTA"Student %d has arrived for his %d round of Vaccination\n", students[num]->num,students[num]->num_try+1);
         setDefaultColor();
@@ -253,7 +255,7 @@ void *incomingStudents(void *arg){
         // Waiting for vaccination to be done
         while(students[num]->cur_status!=VACCINATED)
             ;
-        printf("Student %d/%d vaccinated\n", num+1, students[num]->num);
+        printf("Student %d vaccinated\n", num+1);
         //printf(ANSI_YELLOW"Student %d on Vaccination Zone %d has been vaccinated which has success probability %f\n", students[num]->num, students[num]->zone_num , zones[students[num]->zone_num]->probability);
         // Check Antibody  
         int a= random(1, 100) < (students[num]->probability * 100);  
@@ -261,7 +263,9 @@ void *incomingStudents(void *arg){
             printf(ANSI_GREEN"Student %d tested positive for antibodies\n", students[num]->num);
             setDefaultColor();
             //printf("Num Student left = %d\n", numStudentsleft);
+            pthread_mutex_lock(&mutex1);
             studentStatus[num]=1;
+            pthread_mutex_unlock(&mutex1);
             return NULL;
             break;
         }else{
