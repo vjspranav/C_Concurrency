@@ -14,6 +14,25 @@
 #include <math.h>
 
 static int cnt;
+//Selection sort
+void swap(int *xp, int *yp) 
+{ 
+    int temp = *xp; 
+    *xp = *yp; 
+    *yp = temp; 
+} 
+  
+void selectionSort(int arr[], int f, int l) 
+{ 
+    int i, j, min_idx; 
+    for (i = f; i < l; i++) { 
+        min_idx = i; 
+        for (j = i+1; j <= l; j++) 
+          if (arr[j] < arr[min_idx]) 
+            min_idx = j; 
+        swap(&arr[min_idx], &arr[i]); 
+    } 
+}
 
 // For a shared memory across processes
 int * shareMem(size_t size){
@@ -64,6 +83,8 @@ int process_mergesort(int a[], int f, int l){
         int pid2;
         if(pid1==0){
             process_mergesort(a, f, m);
+            if(m-f<5)
+                selectionSort(a, f, m);
             _exit(1);
         }else{
             pid2=fork();
@@ -71,6 +92,8 @@ int process_mergesort(int a[], int f, int l){
                 process_mergesort(a, m+1, l); 
                 // Wait before printing so they don't collide.
                 // waitpid(pid2, &status, 0);
+                if(l-m+1<5)
+                selectionSort(a, f, m);
                 _exit(1);
             }else{
                 int status;
