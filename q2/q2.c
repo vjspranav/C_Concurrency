@@ -194,6 +194,7 @@ void *vaccinating(void *arg){
         }
     }
 }
+
 void *incomingStudents(void *arg){
     int i, j;
     int num=*(int *) arg;
@@ -218,15 +219,17 @@ void *incomingStudents(void *arg){
                 pthread_mutex_unlock(&studentMutex);
             }
         }
+        
         // Waiting for vaccination to be done
         while(students[num]->cur_status!=VACCINATED)
             ;
         printf("Student %d vaccinated\n", num+1);
         //printf(ANSI_YELLOW"Student %d on Vaccination Zone %d has been vaccinated which has success probability %f\n", students[num]->num, students[num]->zone_num , zones[students[num]->zone_num]->probability);
         // Check Antibody  
-        int a=1; //random(0, 1);  
+        int a=random(1, 100)%2;  
         if(a==1){
             printf(ANSI_GREEN"Student %d tested positive for antibodies\n", students[num]->num);
+            setDefaultColor();
             //printf("Num Student left = %d\n", numStudentsleft);
             if(numStudentsleft==0){
                 //sleep(4);
@@ -235,6 +238,18 @@ void *incomingStudents(void *arg){
             }
 
             break;
+        }else{
+            printf(ANSI_RED"Student %d tested negative %d times\n", students[num]->num, students[num]->num_try);
+            setDefaultColor();
+            students[num]->zone_num=0;
+            students[num]->cur_status=NOT_VACCINATED;
+            if(students[num]->num_try>=3){
+                printf(ANSI_RED"Student %d being sent back\n", students[num]->num);
+                setDefaultColor();
+            }else{
+                numStudentsleft+=1;
+                numStudentsWaiting+=1;
+            }
         }
     }
 }
@@ -305,9 +320,9 @@ int main(){
         pthread_create(&zone_thread[i], NULL, incomingStudents, arg);
         sleep(1);
     }
-//    for(i=0;i<numZones;i++){
-//        pthread_join(student_thread[i], NULL);
-//    }
+ //   for(i=0;i<numZones;i++){
+ //       pthread_join(student_thread[i], NULL);
+ //   }
     for(i=0;i<numZones;i++){
         pthread_join(zone_thread[i], NULL);
     }
