@@ -171,7 +171,7 @@ void *vaccinating(void *arg){
         while(zones[num]->numVaccines>0){
             zones[num]->num_slots_filled=0;
             zones[num]->is_vaccinating=0;
-            printf("%d, waiting=%d, numvac=%d, min of 3=%d\n\n", 8, numStudentsWaiting, zones[num]->numVaccines, min(8, numStudentsWaiting, zones[num]->numVaccines));
+            //printf("%d, waiting=%d, numvac=%d, min of 3=%d\n\n", 8, numStudentsWaiting, zones[num]->numVaccines, min(8, numStudentsWaiting, zones[num]->numVaccines));
             zones[num]->num_slots=min(8, numStudentsWaiting, zones[num]->numVaccines);
             printf(ANSI_YELLOW"\nVaccination Zone %d is ready to vaccinate with %d slots\n​", zones[num]->zone_num, zones[num]->num_slots);
             setDefaultColor();
@@ -179,10 +179,10 @@ void *vaccinating(void *arg){
             zones[num]->is_vaccinating=-1;
             pthread_mutex_lock(&zoneMutex);
             zones[num]->is_vaccinating=1;
-            printf("Current students in line: ");
-            for(i=0;i<zones[num]->num_slots;i++){
-                printf("%d ", zones[num]->slots[i]);
-            }
+            //printf("Current students in line: ");
+            //for(i=0;i<zones[num]->num_slots;i++){
+            //    printf("%d ", zones[num]->slots[i]);
+            //}
             printf("\n");
             while(numStudentsWaiting<0)
                 ; //Wait  for someone to come
@@ -191,7 +191,7 @@ void *vaccinating(void *arg){
 
             for(i=0;i<8;i++){
                 if(zones[num]->slots[i]>0){
-                    printf("\nVaccinating %d student in zone %d\n", zones[num]->slots[i], zones[num]->zone_num);
+                    //printf("\nVaccinating %d student in zone %d\n", zones[num]->slots[i], zones[num]->zone_num);
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATING;
                     zones[num]->numVaccines-=1;
                     students[zones[num]->slots[i]-1]->cur_status=VACCINATED;
