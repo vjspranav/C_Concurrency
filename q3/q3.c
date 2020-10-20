@@ -295,8 +295,7 @@ void *stageAllocation(void *args){
         printf(ANSI_CYAN"\n%s performance with %s on %s Finished", musicians[num]->name, a==1?musicians[asP[stageID].singer_id]->name:musicians[esP[stageID].singer_id]->name, stageName(a, e));
         setDefaultColor();
         if(num_coordinators>0)
-            collectShirt(esP[stageID].singer_id);
-
+            collectShirt(a==1?asP[stageID].singer_id:esP[stageID].singer_id);
     }
     sem_post(a==1?&sem_astage:&sem_estage);
     // Freeing acoustic/electric stages
