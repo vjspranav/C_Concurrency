@@ -100,7 +100,7 @@ void *stageAllocation(void *args){
     int num=*(int *) args;
     int a=0, e=0, pTime=0;
     sleep(musicians[num]->arr_time);
-    printf(ANSI_MAGENTA"%s arrived at Srujana for %s\n", musicians[num]->name, getPerformance(musicians[num]->instrument));
+    printf(ANSI_MAGENTA"%s arrived at Srujana for %s", musicians[num]->name, getPerformance(musicians[num]->instrument));
     setDefaultColor();
 
     if((musicians[num]->is_accoustic==1 && num_astages>0) && (musicians[num]->is_electrical==1 && num_estages>0)){
@@ -118,7 +118,12 @@ void *stageAllocation(void *args){
         if(es==-1 && as==-1){
             pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
             pthread_mutex_lock(&mutex);
-            pthread_cond_timedwait(&pCond, &mutex, &ts);
+            if(pthread_cond_timedwait(&pCond, &mutex, &ts)==ETIMEDOUT){
+                printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                setDefaultColor();
+                pthread_mutex_unlock(&mutex);
+                return NULL;
+            }
             pthread_mutex_unlock(&mutex);
             goto check;
         }
@@ -192,7 +197,7 @@ void *stageAllocation(void *args){
     }
 
     // Performed
-    printf(ANSI_CYAN"%s performance on %s Finished", musicians[num]->name, stageName(a, e));
+    printf(ANSI_CYAN"\n%s performance on %s Finished", musicians[num]->name, stageName(a, e));
     setDefaultColor();
     sem_post(a==1?&sem_astage:&sem_estage);
     // Freeing acoustic/electric stages
@@ -200,12 +205,20 @@ void *stageAllocation(void *args){
         pthread_mutex_lock(&esP[i].slock);
         esP[i].has_music=0;
         esP[i].mus_id=-1;
+        if(esP[i].has_singer==1){
+            esP[i].has_singer=0;
+            esP[i].singer_id=-1;
+        }
         pthread_mutex_unlock(&esP[i].slock);
     }
     if(a==1){
         pthread_mutex_lock(&asP[i].slock);
         asP[i].has_music=0;
         asP[i].mus_id=-1;
+        if(asP[i].has_singer==1){
+            asP[i].has_singer=0;
+            asP[i].singer_id=-1;
+        }
         pthread_mutex_unlock(&asP[i].slock);
     }
 
@@ -223,7 +236,7 @@ int main(){
     printf("Please enter number of musicians: ");
     scanf("%d", &num_musicians);
     if(num_musicians<=0){
-        printf(ANSI_RED"No Musician There to perform, exiting\n");
+        printf(ANSI_RED"No Musician There to perform, exiting");
         setDefaultColor();
         _exit(0);
     }
@@ -232,7 +245,7 @@ int main(){
     sem_init(&sem_estage, 0, num_estages);
     sem_init(&sem_astage, 0, num_astages);
     if(num_estages<=0 && num_astages<=0){
-        printf(ANSI_RED"Acoustic and Elictric stage missing, performances Cancelled\n");
+        printf(ANSI_RED"Acoustic and Elictric stage missing, performances Cancelled");
         setDefaultColor();
         _exit(0);
     }
@@ -306,7 +319,7 @@ int main(){
         *arg = i;        
         if((pthread_create(&musician_thread[i], NULL, stageAllocation, arg)!=0)){
             perror("Musician Could Not perform: ");
-            printf(ANSI_RED"Musician %s could not perform due to internal errors\n", musicians[i]->name);
+            printf(ANSI_RED"Musician %s could not perform due to internal errors", musicians[i]->name);
             setDefaultColor();
         }
     }
