@@ -37,9 +37,9 @@ char *getPerformance(char inst){
     if(inst=='v')
         Performance="performing Violin";
     if(inst=='b')
-        Performance="performing Bass";
     if(inst=='s')
         Performance="singing";
+        Performance="performing Bass";
     return Performance;
 }
 
@@ -59,6 +59,17 @@ typedef struct musician{
     //pthread_mutex_t performing; Fall back
 } musician;
 
+typedef struct stagePerformer {
+    int mus_id;
+    int stage_id;
+    int singer_id;
+    int has_music;
+    int has_singer;
+    pthread_mutex_t slock;
+} stagePerformer;
+
+stagePerformer asP[200];
+stagePerformer esP[200];
 musician *musicians[200];
 pthread_t musician_thread[200];
 pthread_cond_t pCond = PTHREAD_COND_INITIALIZER; 
@@ -76,15 +87,16 @@ struct timespec ts;
 
 void collectShirt(int num){
     sem_wait(&sem_co);
-    printf(ANSI_YELLOW"%s collecting t-shirt", musicians[num]->name);
+    printf(ANSI_YELLOW"\n%s collecting t-shirt", musicians[num]->name);
     setDefaultColor();
     sleep(2);
-    printf(ANSI_GREEN"%s collected t-shirt and leaving", musicians[num]->name);
+    printf(ANSI_GREEN"\n%s collected t-shirt and leaving", musicians[num]->name);
     setDefaultColor();
     sem_post(&sem_co);
 }
 
 void *stageAllocation(void *args){
+    int stageID, musicID, singerID, isSinger=0, i;
     int num=*(int *) args;
     int a=0, e=0, pTime=0;
     sleep(musicians[num]->arr_time);
@@ -115,7 +127,7 @@ void *stageAllocation(void *args){
         if(musicians[num]->is_accoustic==1 && num_astages>0){
             if(sem_timedwait(&sem_astage, &ts)!=0){
                 if(errno==ETIMEDOUT){
-                    printf(ANSI_YELLOW"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                    printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
                     setDefaultColor();
                     return NULL;
                 }
@@ -135,6 +147,35 @@ void *stageAllocation(void *args){
             e=1;
         }
     }
+
+    // Keep track of acoustic/electric stages
+    if(isSinger==0){
+        if(e==1){
+            for(i=0;i<num_estages;i++){
+                if(esP[i].has_music==0){
+                    pthread_mutex_lock(&esP[i].slock);
+                    stageID=esP[i].stage_id;
+                    esP[i].has_music=1;
+                    esP[i].mus_id=num;
+                    pthread_mutex_unlock(&esP[i].slock);
+                    break;
+                }
+            }
+        }
+        if(a==1){
+            for(i=0;i<num_astages;i++){
+                if(asP[i].has_music==0){
+                    pthread_mutex_lock(&asP[i].slock);
+                    stageID=asP[i].stage_id;
+                    asP[i].has_music=1;
+                    asP[i].mus_id=num;
+                    pthread_mutex_unlock(&asP[i].slock);
+                    break;
+                }
+            }
+        }
+    }
+
     // If only electric/acoustic and respective stage is not available
     if(a==0 && e==0){
         printf(ANSI_RED"Performer %s left as he doesn't have %s", musicians[num]->name, stageName(musicians[num]->is_accoustic, musicians[num]->is_electrical));
@@ -143,7 +184,7 @@ void *stageAllocation(void *args){
     }
 
     // Performing
-    printf(ANSI_CYAN"%s %s on %s for %d seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), stageName(a, e), musicians[num]->performance_time);
+    printf(ANSI_CYAN"%s %s on %s (id=%d) for %d seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), stageName(a, e), stageID, musicians[num]->performance_time);
     setDefaultColor();
     while(pTime<musicians[num]->performance_time){
         sleep(1);
@@ -154,6 +195,19 @@ void *stageAllocation(void *args){
     printf(ANSI_CYAN"%s performance on %s Finished", musicians[num]->name, stageName(a, e));
     setDefaultColor();
     sem_post(a==1?&sem_astage:&sem_estage);
+    // Freeing acoustic/electric stages
+    if(e==1){
+        pthread_mutex_lock(&esP[i].slock);
+        esP[i].has_music=0;
+        esP[i].mus_id=-1;
+        pthread_mutex_unlock(&esP[i].slock);
+    }
+    if(a==1){
+        pthread_mutex_lock(&asP[i].slock);
+        asP[i].has_music=0;
+        asP[i].mus_id=-1;
+        pthread_mutex_unlock(&asP[i].slock);
+    }
 
     // Signal any conditionally waiting musician
     pthread_cond_signal(&pCond);
@@ -227,6 +281,24 @@ int main(){
         printf(ANSI_ORANGE"\n****No Co-ordinators found tshirt Distribution will not be done****\n");
         setDefaultColor();
     }
+
+    for(i=0;i<num_astages;i++){
+        asP[i].stage_id=i;
+        asP[i].has_music=0;
+        asP[i].has_singer=0;
+        asP[i].mus_id=-1;
+        asP[i].singer_id=-1;
+        pthread_mutex_init(&asP[i].slock, NULL);
+    }
+    for(i=0;i<num_estages;i++){
+        esP[i].stage_id=i;
+        esP[i].has_music=0;
+        esP[i].has_singer=0;
+        esP[i].mus_id=-1;
+        esP[i].singer_id=-1;
+        pthread_mutex_init(&esP[i].slock, NULL);
+    }
+
     printf(ANSI_YELLOW"All Inputs successfully taken. Starting perfomance..");
     setDefaultColor();
     for(i=0;i<num_musicians;i++){
@@ -240,4 +312,6 @@ int main(){
     }
     for(i=0;i<num_musicians;i++)
         pthread_join(musician_thread[i], NULL);
+    printf(ANSI_GREEN"\nFinished\n");
+    setDefaultColor();
 }
