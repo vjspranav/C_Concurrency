@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 199309L //required for clock
 #include <stdio.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -15,13 +14,16 @@
 #define ANSI_GREEN "\033[1;32m"
 #define ANSI_YELLOW "\033[1;33m"
 #define ANSI_MAGENTA "\033[1;35m"
+#define ANSI_ORANGE "\033[38:2:255:165:0m"
 #define ANSI_DEFAULT "\033[0m"
 
 void setDefaultColor(){
     printf(ANSI_DEFAULT"\n");
 }
 
-int random(int min, int max){
+int randomNum(int min, int max){
+    if(min==max)
+        return min;
     return (rand()%( max -min))+min;
 }
 
@@ -59,7 +61,7 @@ typedef struct musician{
 
 musician *musicians[200];
 pthread_t musician_thread[200];
-pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER; 
+pthread_cond_t pCond = PTHREAD_COND_INITIALIZER; 
 int num_musicians, num_astages, num_estages, num_coordinators, t1, t2, t;
 sem_t sem_astage, sem_estage, sem_co;
 struct timespec ts;
@@ -72,39 +74,91 @@ struct timespec ts;
  * Fall back
  */
 
+void collectShirt(int num){
+    sem_wait(&sem_co);
+    printf(ANSI_YELLOW"%s collecting t-shirt", musicians[num]->name);
+    setDefaultColor();
+    sleep(2);
+    printf(ANSI_GREEN"%s collected t-shirt and leaving", musicians[num]->name);
+    setDefaultColor();
+    sem_post(&sem_co);
+}
+
 void *stageAllocation(void *args){
     int num=*(int *) args;
     int a=0, e=0, pTime=0;
     sleep(musicians[num]->arr_time);
-    printf(ANSI_MAGENTA"%s arrived at Srujana for %s", musicians[num]->name, getPerformance(musicians[num]->instrument));
+    printf(ANSI_MAGENTA"%s arrived at Srujana for %s\n", musicians[num]->name, getPerformance(musicians[num]->instrument));
     setDefaultColor();
-    if(musicians[num]->is_accoustic){
-        if(sem_timedwait(&sem_astage, &ts)!=0){
-            if(errno==ETIMEDOUT){
-                printf(ANSI_YELLOW"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
-                setDefaultColor();
-                return NULL;
-            }
+
+    if((musicians[num]->is_accoustic==1 && num_astages>0) && (musicians[num]->is_electrical==1 && num_estages>0)){
+        int as=0;
+        int es=0;
+        check:
+        es=sem_trywait(&sem_estage);
+        if(es==-1){
+            as=sem_trywait(&sem_astage);
+            if(as!=-1)
+                a=1;
+        }else{
+            e=1;
         }
-        a=1;
-    }
-    if(musicians[num]->is_electrical){
-        if(sem_timedwait(&sem_estage, &ts)!=0){
-            if(errno==ETIMEDOUT){
-                printf(ANSI_YELLOW"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
-                setDefaultColor();
-                return NULL;
-            }
+        if(es==-1 && as==-1){
+            pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+            pthread_mutex_lock(&mutex);
+            pthread_cond_timedwait(&pCond, &mutex, &ts);
+            pthread_mutex_unlock(&mutex);
+            goto check;
         }
-        e=1;
+    }else{
+        //If only accoustic
+        if(musicians[num]->is_accoustic==1 && num_astages>0){
+            if(sem_timedwait(&sem_astage, &ts)!=0){
+                if(errno==ETIMEDOUT){
+                    printf(ANSI_YELLOW"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                    setDefaultColor();
+                    return NULL;
+                }
+            }
+            a=1;
+        }
+
+        // If only electric
+        if(musicians[num]->is_electrical==1 && num_estages>0){
+            if(sem_timedwait(&sem_estage, &ts)!=0){
+                if(errno==ETIMEDOUT){
+                    printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                    setDefaultColor();
+                    return NULL;
+                }
+            }
+            e=1;
+        }
     }
+    // If only electric/acoustic and respective stage is not available
+    if(a==0 && e==0){
+        printf(ANSI_RED"Performer %s left as he doesn't have %s", musicians[num]->name, stageName(musicians[num]->is_accoustic, musicians[num]->is_electrical));
+        setDefaultColor();
+        return NULL;
+    }
+
+    // Performing
     printf(ANSI_CYAN"%s %s on %s for %d seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), stageName(a, e), musicians[num]->performance_time);
     setDefaultColor();
     while(pTime<musicians[num]->performance_time){
         sleep(1);
         pTime+=1;
     }
+
+    // Performed
+    printf(ANSI_CYAN"%s performance on %s Finished", musicians[num]->name, stageName(a, e));
+    setDefaultColor();
     sem_post(a==1?&sem_astage:&sem_estage);
+
+    // Signal any conditionally waiting musician
+    pthread_cond_signal(&pCond);
+    if(num_coordinators>0)
+        collectShirt(num);
     return NULL;
 }
 
@@ -121,13 +175,16 @@ int main(){
     }
     printf("Please enter number of accoustic and electirc stages with a space: ");
     scanf("%d %d", &num_astages, &num_estages);
-    if(num_estages<=0 || num_astages<=0){
-        printf(ANSI_RED"Acoustic or Elictric stage missing, performances Cancelled\n");
+    sem_init(&sem_estage, 0, num_estages);
+    sem_init(&sem_astage, 0, num_astages);
+    if(num_estages<=0 && num_astages<=0){
+        printf(ANSI_RED"Acoustic and Elictric stage missing, performances Cancelled\n");
         setDefaultColor();
         _exit(0);
     }
     printf("Please enter number of coordinators: ");
     scanf("%d", &num_coordinators);
+    sem_init(&sem_co, 0, num_coordinators);
     printf("Please enter t1, t2 and t with a space: ");
     scanf("%d %d %d", &t1, &t2, &t);
     
@@ -157,14 +214,19 @@ int main(){
             musicians[i]->is_electrical=1;
         if(temp_type=='s')
             musicians[i]->is_singer=1; 
-        musicians[i]->performance_time=random(t1, t2);
+        musicians[i]->performance_time=randomNum(t1, t2);
     }
     ts.tv_sec=t;
+
     // Show all input taken
     printf("Sujana Details\n");
     printf("Number of a/e stages=%d/%d\nt=%d t1=%d t2=%d\nNumber of musicians: %d (The details Follow)\n", num_astages, num_estages, t, t1, t2, num_musicians);
     for(i=0;i<num_musicians;i++)
         printf("%s\t%c\t%d\n", musicians[i]->name, musicians[i]->instrument, musicians[i]->arr_time);
+    if(num_coordinators<=0){
+        printf(ANSI_ORANGE"\n****No Co-ordinators found tshirt Distribution will not be done****\n");
+        setDefaultColor();
+    }
     printf(ANSI_YELLOW"All Inputs successfully taken. Starting perfomance..");
     setDefaultColor();
     for(i=0;i<num_musicians;i++){
