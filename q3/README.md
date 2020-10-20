@@ -45,3 +45,5 @@ if found the musician is alloted the stage and his records and stage id stored i
 After performance semaphore is put on post and performer is sent for collecting tshirts.
 If a singer comes, and sees no stage free but a musician performing that singer id is added to struct of that stage 
 this working has been done with a mutex lock on conditional wait.  
+  
+Complete Report Updated at: https://github.com/vjspranav/C_Concurrency/blob/master/q3/README.md
