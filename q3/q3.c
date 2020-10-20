@@ -37,9 +37,9 @@ char *getPerformance(char inst){
     if(inst=='v')
         Performance="performing Violin";
     if(inst=='b')
+        Performance="performing Bass";
     if(inst=='s')
         Performance="singing";
-        Performance="performing Bass";
     return Performance;
 }
 
@@ -96,17 +96,19 @@ void collectShirt(int num){
 }
 
 void *stageAllocation(void *args){
-    int stageID, musicID, singerID, isSinger=0, i;
+    int stageID=-1, musicID, singerID, isSinger=0, i;
     int num=*(int *) args;
     int a=0, e=0, pTime=0;
     sleep(musicians[num]->arr_time);
-    printf(ANSI_MAGENTA"%s arrived at Srujana for %s", musicians[num]->name, getPerformance(musicians[num]->instrument));
+    printf(ANSI_MAGENTA"\n%s arrived at Srujana for %s", musicians[num]->name, getPerformance(musicians[num]->instrument));
     setDefaultColor();
 
-    if((musicians[num]->is_accoustic==1 && num_astages>0) && (musicians[num]->is_electrical==1 && num_estages>0)){
+    if(musicians[num]->is_singer==1){
+        isSinger=1;
+
         int as=0;
         int es=0;
-        check:
+        check1:
         es=sem_trywait(&sem_estage);
         if(es==-1){
             as=sem_trywait(&sem_astage);
@@ -115,44 +117,105 @@ void *stageAllocation(void *args){
         }else{
             e=1;
         }
+
+        for(i=0;i<num_estages;i++){
+            if(esP[i].has_singer==0 && esP[i].has_music==1){
+                pthread_mutex_lock(&esP[i].slock);
+                stageID=i;
+                musicID=esP[i].mus_id;
+                singerID=num;
+                esP[i].has_singer=1;
+                esP[i].singer_id=num;
+                pthread_mutex_unlock(&esP[i].slock);
+                break;
+            }
+        }
+        if(singerID==0){
+            for(i=0;i<num_astages;i++){
+                if(asP[i].has_singer==0 && asP[i].has_music==1){
+                    pthread_mutex_lock(&asP[i].slock);
+                    stageID=i;
+                    musicID=asP[i].mus_id;
+                    singerID=num;
+                    asP[i].has_singer=1;
+                    asP[i].singer_id=num;
+                    pthread_mutex_unlock(&asP[i].slock);
+                    break;
+                }
+            }
+        }
+        if(stageID!=-1){
+            musicians[musicID]->performance_time+=2;
+            printf(ANSI_CYAN"\n%s %s with %s on %s (id=%d) for 2 more seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), musicians[musicID]->name, stageName(a, e), stageID);
+            setDefaultColor();
+            return NULL;
+        }
         if(es==-1 && as==-1){
             pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
             pthread_mutex_lock(&mutex);
             if(pthread_cond_timedwait(&pCond, &mutex, &ts)==ETIMEDOUT){
-                printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                printf(ANSI_ORANGE"\nPerformer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
                 setDefaultColor();
                 pthread_mutex_unlock(&mutex);
                 return NULL;
             }
             pthread_mutex_unlock(&mutex);
-            goto check;
-        }
-    }else{
-        //If only accoustic
-        if(musicians[num]->is_accoustic==1 && num_astages>0){
-            if(sem_timedwait(&sem_astage, &ts)!=0){
-                if(errno==ETIMEDOUT){
-                    printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
-                    setDefaultColor();
-                    return NULL;
-                }
-            }
-            a=1;
+            goto check1;
         }
 
-        // If only electric
-        if(musicians[num]->is_electrical==1 && num_estages>0){
-            if(sem_timedwait(&sem_estage, &ts)!=0){
-                if(errno==ETIMEDOUT){
-                    printf(ANSI_ORANGE"Performer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+    }
+    
+    if(isSinger!=1){
+        if((musicians[num]->is_accoustic==1 && num_astages>0) && (musicians[num]->is_electrical==1 && num_estages>0)){
+            int as=0;
+            int es=0;
+            check:
+            es=sem_trywait(&sem_estage);
+            if(es==-1){
+                as=sem_trywait(&sem_astage);
+                if(as!=-1)
+                    a=1;
+            }else{
+                e=1;
+            }
+            if(es==-1 && as==-1){
+                pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+                pthread_mutex_lock(&mutex);
+                if(pthread_cond_timedwait(&pCond, &mutex, &ts)==ETIMEDOUT){
+                    printf(ANSI_ORANGE"\nPerformer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
                     setDefaultColor();
+                    pthread_mutex_unlock(&mutex);
                     return NULL;
                 }
+                pthread_mutex_unlock(&mutex);
+                goto check;
             }
-            e=1;
+        }else{
+            //If only accoustic
+            if(musicians[num]->is_accoustic==1 && num_astages>0){
+                if(sem_timedwait(&sem_astage, &ts)!=0){
+                    if(errno==ETIMEDOUT){
+                        printf(ANSI_ORANGE"\nPerformer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                        setDefaultColor();
+                        return NULL;
+                    }
+                }
+                a=1;
+            }
+
+            // If only electric
+            if(musicians[num]->is_electrical==1 && num_estages>0){
+                if(sem_timedwait(&sem_estage, &ts)!=0){
+                    if(errno==ETIMEDOUT){
+                        printf(ANSI_ORANGE"\nPerformer %s %s Left without performing due to impatience", musicians[num]->name, getPerformance(musicians[num]->instrument));
+                        setDefaultColor();
+                        return NULL;
+                    }
+                }
+                e=1;
+            }
         }
     }
-
     // Keep track of acoustic/electric stages
     if(isSinger==0){
         if(e==1){
@@ -179,17 +242,42 @@ void *stageAllocation(void *args){
                 }
             }
         }
+    }else{
+        if(e==1){
+            for(i=0;i<num_estages;i++){
+                if(esP[i].has_music==0 && esP[i].has_singer==0){
+                    pthread_mutex_lock(&esP[i].slock);
+                    stageID=esP[i].stage_id;
+                    esP[i].has_singer=1;
+                    esP[i].singer_id=num;
+                    pthread_mutex_unlock(&esP[i].slock);
+                    break;
+                }
+            }
+        }
+        if(a==1){
+            for(i=0;i<num_astages;i++){
+                if(asP[i].has_music==0 && asP[i].has_music==0){
+                    pthread_mutex_lock(&asP[i].slock);
+                    stageID=asP[i].stage_id;
+                    asP[i].has_singer=1;
+                    asP[i].singer_id=num;
+                    pthread_mutex_unlock(&asP[i].slock);
+                    break;
+                }
+            }
+        }
     }
 
     // If only electric/acoustic and respective stage is not available
     if(a==0 && e==0){
-        printf(ANSI_RED"Performer %s left as he doesn't have %s", musicians[num]->name, stageName(musicians[num]->is_accoustic, musicians[num]->is_electrical));
+        printf(ANSI_RED"\nPerformer %s left as he doesn't have %s", musicians[num]->name, stageName(musicians[num]->is_accoustic, musicians[num]->is_electrical));
         setDefaultColor();
         return NULL;
     }
 
     // Performing
-    printf(ANSI_CYAN"%s %s on %s (id=%d) for %d seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), stageName(a, e), stageID, musicians[num]->performance_time);
+    printf(ANSI_CYAN"\n%s %s on %s (id=%d) for %d seconds", musicians[num]->name, getPerformance(musicians[num]->instrument), stageName(a, e), stageID, musicians[num]->performance_time);
     setDefaultColor();
     while(pTime<musicians[num]->performance_time){
         sleep(1);
@@ -197,15 +285,26 @@ void *stageAllocation(void *args){
     }
 
     // Performed
-    printf(ANSI_CYAN"\n%s performance on %s Finished", musicians[num]->name, stageName(a, e));
-    setDefaultColor();
+    if(a==1?asP[stageID].has_singer==0:esP[stageID].has_singer==0){
+        printf(ANSI_CYAN"\n%s performance on %s Finished", musicians[num]->name, stageName(a, e));
+        setDefaultColor();
+    }else if(isSinger==1){
+        printf(ANSI_CYAN"\n%s performance on %s Finished", musicians[num]->name, stageName(a, e));
+        setDefaultColor();
+    }else{
+        printf(ANSI_CYAN"\n%s performance with %s on %s Finished", musicians[num]->name, a==1?musicians[asP[stageID].singer_id]->name:musicians[esP[stageID].singer_id]->name, stageName(a, e));
+        setDefaultColor();
+        if(num_coordinators>0)
+            collectShirt(esP[stageID].singer_id);
+
+    }
     sem_post(a==1?&sem_astage:&sem_estage);
     // Freeing acoustic/electric stages
     if(e==1){
         pthread_mutex_lock(&esP[i].slock);
         esP[i].has_music=0;
         esP[i].mus_id=-1;
-        if(esP[i].has_singer==1){
+        if(esP[i].has_singer==1 || isSinger==1){
             esP[i].has_singer=0;
             esP[i].singer_id=-1;
         }
@@ -215,7 +314,7 @@ void *stageAllocation(void *args){
         pthread_mutex_lock(&asP[i].slock);
         asP[i].has_music=0;
         asP[i].mus_id=-1;
-        if(asP[i].has_singer==1){
+        if(asP[i].has_singer==1 || isSinger==1){
             asP[i].has_singer=0;
             asP[i].singer_id=-1;
         }
